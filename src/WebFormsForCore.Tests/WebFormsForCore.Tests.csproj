@@ -1,0 +1,48 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+	<PropertyGroup>
+		<TargetFrameworks>net8.0;net10.0;net11.0</TargetFrameworks>
+		<ImplicitUsings>disable</ImplicitUsings>
+		<Nullable>disable</Nullable>
+		<IsPackable>false</IsPackable>
+		<IsTestProject>true</IsTestProject>
+		<GenerateAssemblyInfo>false</GenerateAssemblyInfo>
+		<RootNamespace>WebFormsForCore.Tests</RootNamespace>
+		<!-- Must match src/VersionInfo.cs -->
+		<SystemWebVersion>11.0.1.0</SystemWebVersion>
+	</PropertyGroup>
+
+	<ItemGroup>
+		<FrameworkReference Include="Microsoft.AspNetCore.App" />
+		<PackageReference Include="Microsoft.NET.Test.Sdk" />
+		<PackageReference Include="NUnit" />
+		<PackageReference Include="NUnit3TestAdapter" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<ProjectReference Include="..\WebFormsForCore.Web\WebFormsForCore.Web.csproj" />
+		<ProjectReference Include="..\WebFormsForCore.Web.Services\WebFormsForCore.Web.Services.csproj" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<!-- Source for the trimmed per-site machine.config written by WebFormsTestSite -->
+		<Content Include="..\WebFormsForCore.TestApp\App_Data\machine.config" Link="Infrastructure\machine.config" CopyToOutputDirectory="PreserveNewest" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<Using Include="NUnit.Framework" />
+	</ItemGroup>
+
+	<!--
+		The generated deps.json lists System.Web.dll without an assembly version, so the host prefers the
+		System.Web facade of the shared framework (10.0.0.0) over ours. Give our entry a version so it wins.
+	-->
+	<Target Name="PatchSystemWebDepsVersion" AfterTargets="GenerateBuildDependencyFile" Condition="Exists('$(ProjectDepsFilePath)')">
+		<PropertyGroup>
+			<DepsText>$([System.IO.File]::ReadAllText('$(ProjectDepsFilePath)'))</DepsText>
+			<DepsText>$([System.Text.RegularExpressions.Regex]::Replace('$(DepsText)', '("System\.Web\.dll": \{)\s*"fileVersion": "0\.0\.0\.0"', '$1 "assemblyVersion": "$(SystemWebVersion)", "fileVersion": "$(SystemWebVersion)"'))</DepsText>
+		</PropertyGroup>
+		<WriteLinesToFile File="$(ProjectDepsFilePath)" Lines="$(DepsText)" Overwrite="true" WriteOnlyWhenDifferent="true" />
+	</Target>
+
+</Project>
