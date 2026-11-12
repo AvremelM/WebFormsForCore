@@ -3,7 +3,7 @@
 using System.Runtime.InteropServices;
 using System.Security;
 using System.Security.Principal;
-using System.Collections.Concurrent;
+using System.Collections.Immutable;
 using System.Threading;
 
 #nullable disable
@@ -19,8 +19,22 @@ namespace System.Runtime.Remoting.Messaging
 		{
 		}
 
-		static AsyncLocal<ConcurrentDictionary<string, object?>> data = new();
-		public static ConcurrentDictionary<string, object?> Data => data.Value ??= new ConcurrentDictionary<string, object?>();
+		// Copy-on-write, like the LogicalCallContext of .NET Framework: every change replaces the immutable dictionary
+		// stored in the AsyncLocal, so it only belongs to the current execution context and the flows started from it.
+		// A single mutable dictionary would be shared by every flow that inherited it (parent, children and sibling
+		// requests), so a change in one flow would be visible in, and clobber, the others.
+		private static readonly AsyncLocal<ImmutableDictionary<string, object?>> data = new();
+
+		private static ImmutableDictionary<string, object?> Snapshot => data.Value ?? ImmutableDictionary<string, object?>.Empty;
+
+		private static object? Get(string name) => Snapshot.TryGetValue(name, out var value) ? value : null;
+
+		private static void Set(string name, object? value)
+		{
+			var snapshot = Snapshot;
+			if (value != null) data.Value = snapshot.SetItem(name, value);
+			else if (snapshot.ContainsKey(name)) data.Value = snapshot.Remove(name);
+		}
 
 
 #if !WebFormsForCore
@@ -43,8 +57,7 @@ namespace System.Runtime.Remoting.Messaging
         executionContext.LogicalCallContext.FreeNamedDataSlot(name);
         executionContext.IllogicalCallContext.FreeNamedDataSlot(name);
 #else
-			object? value;
-			Data.TryRemove(name, out value);
+			Set(name, null);
 #endif
 		}
 
@@ -58,9 +71,7 @@ namespace System.Runtime.Remoting.Messaging
 #if NETFRAMEWORK
 			return Thread.CurrentThread.ExecutionContext.GetExecutionContextReader().LogicalCallContext.GetData(name);
 #else
-			object value;
-			if (Data.TryGetValue(name, out value)) return value;
-			return null;
+			return Get(name);
 #endif
 		}
 
@@ -97,7 +108,7 @@ namespace System.Runtime.Remoting.Messaging
 			[SecurityCritical]
 			set
 			{
-				Data.AddOrUpdate("CallContext.Principal", value, (key, obj) => value);
+				Set("CallContext.Principal", value);
 			}
 #endif
 		}
@@ -133,7 +144,7 @@ namespace System.Runtime.Remoting.Messaging
 					executionContext.LogicalCallContext.HostContext = (object)null;
 				}
 #else
-				Data.AddOrUpdate("CallContext.HostContext", value, (key, obj) => value);
+				Set("CallContext.HostContext", value);
 #endif
 			}
 		}
@@ -167,7 +178,7 @@ namespace System.Runtime.Remoting.Messaging
 				executionContext.IllogicalCallContext.SetData(name, data);
 			}
 #else
-			Data.AddOrUpdate(name, data, (key, obj) => data);
+			Set(name, data);
 #endif
 		}
 
@@ -183,7 +194,7 @@ namespace System.Runtime.Remoting.Messaging
 			executionContext.IllogicalCallContext.FreeNamedDataSlot(name);
 			executionContext.LogicalCallContext.SetData(name, data);
 #else
-			Data.AddOrUpdate(name, data, (key, obj) => data);
+			Set(name, data);
 #endif
 		}
 
