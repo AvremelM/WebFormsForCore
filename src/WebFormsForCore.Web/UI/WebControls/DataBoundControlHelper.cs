@@ -23,6 +23,9 @@ namespace System.Web.UI.WebControls {
     internal static class DataBoundControlHelper {
 
         private static MethodInfo s_enableDynamicDataMethod;
+        // System.Web.DynamicData is a separate package in WebFormsForCore. ItemType is also used for plain
+        // strongly typed binding, so applications that do not deploy the assembly must keep working.
+        private static bool s_dynamicDataUnavailable;
 
         /// <devdoc>
         /// Walks up the stack of NamingContainers starting at 'control' to find a control with the ID 'controlID'.
@@ -127,10 +130,30 @@ namespace System.Web.UI.WebControls {
                 throw new ArgumentNullException("control");
             }
 
+            if (s_dynamicDataUnavailable) {
+                return;
+            }
+
             if (s_enableDynamicDataMethod == null) {
                 //Type dataControlExtensionsType = Assembly.Load(AssemblyRef.SystemWebDynamicData).GetType("System.Web.UI.DataControlExtensions");
                 var alc = AssemblyLoadContext.GetLoadContext(Assembly.GetExecutingAssembly());
-                 Type dataControlExtensionsType = alc.LoadFromAssemblyName(new AssemblyName(AssemblyRef.SystemWebDynamicData)).GetType("System.Web.UI.DataControlExtensions");
+                Type dataControlExtensionsType;
+                try {
+                    dataControlExtensionsType = alc.LoadFromAssemblyName(new AssemblyName(AssemblyRef.SystemWebDynamicData)).GetType("System.Web.UI.DataControlExtensions");
+                }
+                catch (System.IO.FileNotFoundException) {
+                    dataControlExtensionsType = null;
+                }
+                catch (System.IO.FileLoadException) {
+                    dataControlExtensionsType = null;
+                }
+
+                if (dataControlExtensionsType == null) {
+                    // Dynamic Data is not deployed with the application: skip it, the control works without.
+                    s_dynamicDataUnavailable = true;
+                    return;
+                }
+
                 s_enableDynamicDataMethod = dataControlExtensionsType.GetMethod("EnableDynamicData",
                                                                               BindingFlags.Public | BindingFlags.Static,
                                                                               binder: null,
