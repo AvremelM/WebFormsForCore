@@ -223,6 +223,35 @@ namespace System.Web {
             }
         }
 
+#if NETCOREAPP
+        // Custom headers (AppendHeader/AddHeader) in the classic pipeline, for HttpResponse.Headers.
+        internal System.Collections.Generic.IEnumerable<System.Collections.Generic.KeyValuePair<string, string>> GetCustomHeaders() {
+            if (_customHeaders != null) {
+                foreach (HttpResponseHeader h in _customHeaders) {
+                    yield return new System.Collections.Generic.KeyValuePair<string, string>(h.Name, h.Value);
+                }
+            }
+        }
+
+        internal void SetCustomHeader(String name, String value) {
+            RemoveCustomHeader(name);
+            AppendHeader(name, value);
+        }
+
+        internal void RemoveCustomHeader(String name) {
+            if (_headersWritten)
+                throw new HttpException(SR.GetString(SR.Cannot_append_header_after_headers_sent));
+
+            if (_customHeaders != null) {
+                for (int i = _customHeaders.Count - 1; i >= 0; i--) {
+                    if (StringUtil.EqualsIgnoreCase(((HttpResponseHeader)_customHeaders[i]).Name, name)) {
+                        _customHeaders.RemoveAt(i);
+                    }
+                }
+            }
+        }
+#endif
+
         public bool HeadersWritten {
             get { return _headersWritten; }
             internal set { _headersWritten = value; }
@@ -932,6 +961,12 @@ namespace System.Web {
         public NameValueCollection Headers {
             get {
                 if ( !(_wr is IIS7WorkerRequest) ) {
+#if NETCOREAPP
+                    // The ASP.NET Core host only runs the classic pipeline: view and write through the response headers.
+                    if (_wr is AspNetCoreWorkerRequest) {
+                        return new ClassicResponseHeaderCollection(this);
+                    }
+#endif
                     throw new PlatformNotSupportedException(SR.GetString(SR.Requires_Iis_Integrated_Mode));
                 }
 
