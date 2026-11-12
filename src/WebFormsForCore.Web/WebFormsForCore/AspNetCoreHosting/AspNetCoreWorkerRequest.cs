@@ -209,9 +209,16 @@ namespace System.Web.Hosting
 		public override byte[] GetQueryStringRawBytes() => Encoding.ASCII.GetBytes(GetQueryString());
 		public override string GetRawUrl()
 		{
+			// The request target as the client sent it, as IIS reports it.
+			var rawTarget = Context.Features.Get<Microsoft.AspNetCore.Http.Features.IHttpRequestFeature>()?.RawTarget;
+			if (!string.IsNullOrEmpty(rawTarget) && rawTarget[0] == '/') return rawTarget;
+
+			// path is decoded, the raw url has to be escaped.
+			var request = Context.Request;
+			var escapedPath = request.PathBase.ToUriComponent() + request.Path.ToUriComponent();
 			var query = GetQueryString();
-			if (string.IsNullOrEmpty(query)) return path;
-			return $"{path}?{query}";
+			if (string.IsNullOrEmpty(query)) return escapedPath;
+			return $"{escapedPath}?{query}";
 		}
 		public override string GetRemoteAddress() => Context.Connection.RemoteIpAddress.ToString();
 		public override int GetRemotePort() => Context.Connection.RemotePort;
@@ -284,9 +291,9 @@ namespace System.Web.Hosting
 
 		public override string GetUriPath()
 		{
+			// Kestrel already decoded the path. Concatenating the PathString objects would escape it again.
 			var request = Context.Request;
-			if (string.IsNullOrEmpty(request.Path)) return request.PathBase;
-			else return $"{request.PathBase}/{request.Path}";
+			return request.PathBase.Value + request.Path.Value;
 		}
 
 		public override IntPtr GetUserToken()
@@ -759,7 +766,9 @@ namespace System.Web.Hosting
 		{
 			if (!requestParsed)
 			{
-				path = $"{Context.Request.PathBase}{Context.Request.Path}";
+				// Kestrel already decoded the path. Interpolating the PathString objects would escape it again
+				// (a space becomes %20), which IsBadPath rejects and which does not name the file on disk.
+				path = Context.Request.PathBase.Value + Context.Request.Path.Value;
 
 				int lastDot = path.LastIndexOf('.');
 				int lastSlh = path.LastIndexOf('/');
