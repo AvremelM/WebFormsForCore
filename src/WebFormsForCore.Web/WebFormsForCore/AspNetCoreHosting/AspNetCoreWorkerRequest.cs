@@ -217,6 +217,13 @@ namespace System.Web.Hosting
 		public override int GetRemotePort() => Context.Connection.RemotePort;
 		public override string GetServerName()
 		{
+			// IIS reports the Host header (without port) as SERVER_NAME, which is also what Request.Url is built from.
+			var host = Context.Request.Host;
+			if (host.HasValue && !string.IsNullOrEmpty(host.Host))
+			{
+				return host.Host;
+			}
+
 			string localAddress = GetLocalAddress();
 			if (localAddress.Equals("127.0.0.1") || localAddress.Equals("::1"))
 			{
