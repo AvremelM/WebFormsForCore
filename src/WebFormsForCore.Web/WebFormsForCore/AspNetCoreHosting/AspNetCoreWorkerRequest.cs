@@ -58,6 +58,11 @@ namespace System.Web.Hosting
 
 		public AspNetCoreHost Host { get; private set; }
 
+		public string DefaultDocumentPath =>
+			Context.Items.TryGetValue(AspNetCoreHost.DefaultDocumentItemKey, out var document) && document is string relativePath
+				? Context.Request.PathBase.Value + relativePath
+				: null;
+
 		private string allRawHeaders;
 
 		private byte[] body;

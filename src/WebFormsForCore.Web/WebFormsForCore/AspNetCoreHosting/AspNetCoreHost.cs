@@ -48,6 +48,8 @@ namespace System.Web.Hosting
         public string[] ProhibitedExtensions { get; set; } = new string[] { ".razor", ".cshtml", ".vbhtml", ".cs", ".vb", ".resx", ".resource", ".master", ".asax", ".ascx", "web.config", "appsettings.json" };
         public string[] DefaultDocuments { get; set; } = new string[] { "index.htm", "index.html", "Index.html", "Index.htm", "Default.htm", "iistart.htm", "Default.aspx", "default.aspx" };
         public bool UseClassicMode = false;
+        /// <summary>Key in HttpContext.Items for the default document (relative to PathBase) found by <see cref="IsLegacyRequest"/>.</summary>
+        internal const string DefaultDocumentItemKey = "WebFormsForCore.DefaultDocument";
         public Compilation.ClientBuildManager ClientBuildManager { get; set; } 
 		public AppDomain AppDomain
         {
@@ -262,7 +264,9 @@ namespace System.Web.Hosting
                     .FirstOrDefault(doc => File.Exists(doc.Mapped));
                 if (defaultDoc != null)
                 {
-                    context.Request.Path = defaultDoc.Virtual;
+                    // Do not rewrite the request path here: IIS applies the default document when the handler is mapped
+                    // (see HttpApplication.MapHandlerExecutionStep), so modules still see the requested path in BeginRequest.
+                    context.Items[DefaultDocumentItemKey] = defaultDoc.Virtual;
                     return true;
                 }
             }

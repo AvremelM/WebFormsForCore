@@ -4031,6 +4031,8 @@ namespace System.Web
 
 				if (EtwTrace.IsTraceEnabled(EtwTraceLevel.Verbose, EtwTraceFlags.Infrastructure)) EtwTrace.Trace(EtwTraceType.ETW_TYPE_MAPHANDLER_ENTER, context.WorkerRequest);
 
+				ApplyDefaultDocument(context, request);
+
 				context.Handler = _application.MapHttpHandler(
 					context,
 					request.RequestType,
@@ -4041,6 +4043,20 @@ namespace System.Web
 							 context.ConfigurationPath + ") != context.Request.FilePath (" + context.Request.FilePath + ")");
 
 				if (EtwTrace.IsTraceEnabled(EtwTraceLevel.Verbose, EtwTraceFlags.Infrastructure)) EtwTrace.Trace(EtwTraceType.ETW_TYPE_MAPHANDLER_LEAVE, context.WorkerRequest);
+			}
+
+			// IIS serves a directory request from its default document when the handler is mapped, so the modules
+			// that ran before (BeginRequest ... PostResolveRequestCache) saw the requested path, e.g. "/".
+			private static void ApplyDefaultDocument(HttpContext context, HttpRequest request)
+			{
+				var defaultDocument = (context.WorkerRequest as IAspNetCoreWorkerRequest)?.DefaultDocumentPath;
+				if (defaultDocument == null) return;
+
+				// A module might have rewritten the path to something else, then the default document does not apply.
+				var directory = defaultDocument.Substring(0, defaultDocument.LastIndexOf('/'));
+				if (!string.Equals(request.FilePath.TrimEnd('/'), directory, StringComparison.OrdinalIgnoreCase)) return;
+
+				context.RewritePath(VirtualPath.Create(defaultDocument), null, null, false /*setClientFilePath*/);
 			}
 
 			bool IExecutionStep.CompletedSynchronously
