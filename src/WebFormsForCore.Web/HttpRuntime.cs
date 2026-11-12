@@ -81,7 +81,10 @@ namespace System.Web
 
 		private static string DirectorySeparatorString = new string(Path.DirectorySeparatorChar, 1);
 		private static string DoubleDirectorySeparatorString = new string(Path.DirectorySeparatorChar, 2);
-		private static char[] s_InvalidPhysicalPathChars = { '/', '?', '*', '<', '>', '|', '"' };
+		// '/' is not valid in a Windows physical path, but it is the directory separator on Unix.
+		private static char[] s_InvalidPhysicalPathChars = Path.DirectorySeparatorChar == '/'
+			? new[] { '?', '*', '<', '>', '|', '"' }
+			: new[] { '/', '?', '*', '<', '>', '|', '"' };
 
 #if OLD
         // For s_forbiddenDirs and s_forbiddenDirsConstant, see
